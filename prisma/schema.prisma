@@ -1,0 +1,93 @@
+// ComicTrans Studio - Production-grade Schema
+// Supports comic translation workflows with projects, chapters, pages, and text blocks
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  name      String?
+  avatar    String?
+  role      String    @default("editor") // admin, editor, viewer
+  projects  Project[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Project {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  sourceLang  String    @default("ja") // Japanese
+  targetLang  String    @default("en") // English
+  coverUrl    String?
+  ownerId     String
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  chapters    Chapter[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Chapter {
+  id        String   @id @default(cuid())
+  title     String?
+  index     Int      @default(0)
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  pages     Page[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+}
+
+model Page {
+  id           String     @id @default(cuid())
+  originalUrl  String     // Original comic page image
+  cleanedUrl   String?    // Cleaned version after inpainting
+  pageNumber   Int        @default(1)
+  width        Float      @default(0)
+  height       Float      @default(0)
+  chapterId    String
+  chapter      Chapter    @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  blocks       TextBlock[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([chapterId])
+}
+
+model TextBlock {
+  id           String   @id @default(cuid())
+  sourceText   String   // Original text from OCR
+  targetText   String?  // Translated text
+  x            Float    // Position X
+  y            Float    // Position Y
+  width        Float    // Width of text box
+  height       Float    // Height of text box
+  rotation     Float    @default(0) // Rotation angle in degrees
+  fontSize     Int      @default(16)
+  fontFamily   String   @default("Arial")
+  fontWeight   String   @default("normal")
+  fontStyle    String   @default("normal")
+  textAlign    String   @default("center")
+  fill         String   @default("#000000")
+  stroke       String?
+  strokeWidth  Float    @default(0)
+  confidence   Float    @default(0) // OCR confidence score
+  isLocked     Boolean  @default(false)
+  isVisible    Boolean  @default(true)
+  pageId       String
+  page         Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([pageId])
+}
