@@ -149,6 +149,37 @@
   overflow: hidden;
 }
 
+/* Fabric.js hidden textarea - prevent scroll jumps when editing text */
+/* Catch ALL textareas that might be created by Fabric.js */
+textarea {
+  position: fixed !important;
+  top: -9999px !important;
+  left: -9999px !important;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  z-index: -9999 !important;
+  scroll-margin: 0 !important;
+  scroll-behavior: auto !important;
+}
+
+/* Allow textareas in our UI components (datagrid, dialogs, etc.) */
+.bg-background textarea,
+[class*="DialogContent"] textarea,
+[class*="ScrollArea"] textarea,
+table textarea,
+input[type="text"] {
+  position: relative !important;
+  top: auto !important;
+  left: auto !important;
+  width: auto !important;
+  height: auto !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  z-index: auto !important;
+}
+
 /* Fabric.js canvas controls styling */
 .canvas-container .upper-canvas {
   cursor: default !important;

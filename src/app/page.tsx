@@ -1383,6 +1383,9 @@ function CanvasEditorContent() {
   // Track which element is currently being edited (to prevent updates/jumps)
   const editingElementIdRef = useRef<string | null>(null)
   
+  // Track if selection change came from canvas (to prevent feedback loop)
+  const isCanvasSelectionRef = useRef(false)
+  
   // Track if there's an active selection on canvas (to prevent sync jumps)
   const hasActiveSelectionRef = useRef(false)
   
@@ -1411,26 +1414,55 @@ function CanvasEditorContent() {
     fabricRef.current = canvas
     elementObjectsRef.current.clear()
     
+    // MutationObserver to catch Fabric.js hidden textarea and fix its position
+    // This prevents the scroll-to-bottom-right issue when editing text
+    const textareaObserver = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.addedNodes.forEach((node) => {
+          if (node instanceof HTMLTextAreaElement) {
+            // Immediately fix the textarea position to prevent scroll
+            node.style.cssText = `
+              position: fixed !important;
+              top: -9999px !important;
+              left: -9999px !important;
+              width: 1px !important;
+              height: 1px !important;
+              opacity: 0 !important;
+              pointer-events: none !important;
+              z-index: -9999 !important;
+            `
+          }
+        })
+      })
+    })
+    textareaObserver.observe(document.body, { childList: true, subtree: true })
+    
     // Selection events
     canvas.on('selection:created', (e) => {
       hasActiveSelectionRef.current = true
+      isCanvasSelectionRef.current = true // Mark as canvas-triggered
       const selected = e.selected?.[0]
       if (selected && (selected as any).elementId) {
         selectElement((selected as any).elementId)
       }
+      setTimeout(() => { isCanvasSelectionRef.current = false }, 0)
     })
     
     canvas.on('selection:updated', (e) => {
       hasActiveSelectionRef.current = true
+      isCanvasSelectionRef.current = true // Mark as canvas-triggered
       const selected = e.selected?.[0]
       if (selected && (selected as any).elementId) {
         selectElement((selected as any).elementId)
       }
+      setTimeout(() => { isCanvasSelectionRef.current = false }, 0)
     })
     
     canvas.on('selection:cleared', () => {
       hasActiveSelectionRef.current = false
+      isCanvasSelectionRef.current = true // Mark as canvas-triggered
       selectElement(null)
+      setTimeout(() => { isCanvasSelectionRef.current = false }, 0)
     })
     
     // Object modifications
@@ -1488,6 +1520,7 @@ function CanvasEditorContent() {
     })
     
     return () => {
+      textareaObserver.disconnect()
       canvas.dispose()
       fabricRef.current = null
       elementObjectsRef.current.clear()
@@ -1829,13 +1862,21 @@ function CanvasEditorContent() {
   }, [currentPageData?.elements, currentPageData])
   
   // Handle selection sync
+  // Sync selection from store to canvas (only when not triggered by canvas itself)
   useEffect(() => {
     const canvas = fabricRef.current
     if (!canvas) return
     
+    // Skip if this selection change came from canvas (prevent feedback loop)
+    if (isCanvasSelectionRef.current) return
+    
+    // Skip if we're editing to prevent jumps
+    if (editingElementIdRef.current) return
+    
     if (selectedElementId) {
       const obj = elementObjectsRef.current.get(selectedElementId)
       const activeObj = canvas.getActiveObject()
+      // Only update if the selection is different (prevent double-selection)
       if (obj && (activeObj as any)?.elementId !== selectedElementId) {
         canvas.setActiveObject(obj)
         canvas.renderAll()
@@ -3474,13 +3515,9 @@ function TextGridComponent() {
   const { currentPageData, selectedElementId, selectElement, updateElement, deleteElement, moveElementUp, moveElementDown } = useAppStore()
   const elements = currentPageData?.elements ?? []
   const textElements = elements.filter(el => el.type === 'text') as TextBlock[]
-  const selectedRowRef = useRef<HTMLDivElement>(null)
   
-  useEffect(() => {
-    if (selectedElementId && selectedRowRef.current) {
-      selectedRowRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-    }
-  }, [selectedElementId])
+  // Removed autoscroll to prevent jumps when clicking textbox
+  // const selectedRowRef = useRef<HTMLDivElement>(null)
   
   return (
     <div className="flex flex-col h-full bg-background">
@@ -3502,7 +3539,6 @@ function TextGridComponent() {
             {textElements.map((block, index) => (
               <tr
                 key={block.id}
-                ref={block.id === selectedElementId ? selectedRowRef : undefined}
                 className={cn(
                   "border-b border-border/50 hover:bg-muted/30 transition-colors cursor-pointer",
                   block.id === selectedElementId && "bg-primary/10"
